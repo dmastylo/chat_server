@@ -7,6 +7,7 @@ class ChatServer
     @servers = []
     @server = TCPServer.new(port)
     @clients = {}
+
     run
   end
 
@@ -32,12 +33,12 @@ class ChatServer
 
         client.puts "OK"
 
-        listen_user_messages(nick_name, client)
+        listen_for_messages(nick_name, client)
       end
     end
   end
 
-  def listen_user_messages(username, client)
+  def listen_for_messages(username, client)
     loop do
       message = client.gets.chomp
 
