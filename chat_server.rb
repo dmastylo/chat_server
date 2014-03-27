@@ -1,6 +1,8 @@
-require "socket"
+require 'socket'
+require './connection'
 
 class ChatServer
+  # clients is a hash -> { nick_name: Connection class }
   attr_accessor :udp_servers, :tcp_servers, :clients
 
   def initialize(ports = {})
@@ -22,40 +24,26 @@ class ChatServer
   def run
     threads = []
 
-    # TCP Server connections
     # TODO: UDP Server
     # TODO: chunking
+    # TCP Server connections
     @tcp_servers.map do |tcp_server|
       threads << Thread.new do
         loop do
           Thread.start(tcp_server.accept) do |client|
-            puts "client connected" # TODO remove
+            connection = Connection.new(nil, client)
 
-            client.puts "Enter your username" # TODO remove
-            nick_name = client.gets.chomp
+            connection.send_message "Enter your username" # TODO remove
 
-            # Make sure it matches the "ME IS user_name" format
-            if match = nick_name.match(/ME IS (.*)/)
-              nick_name = match[1]
+            nick_name = set_nick_name(connection, connection.read_from_client)
 
-              # Nickname or client already exists
-              if @clients.has_key?(nick_name) || @clients.has_value?(client)
-                client.puts "ERROR"
-                client.close
-                Thread.kill self
-              end
-            else
-              client.puts "ERROR"
-              client.close
-              Thread.kill self
-            end
-
-            @clients[nick_name.to_sym] = client
+            connection.nick_name = nick_name
+            @clients[nick_name.to_sym] = connection
             puts "#{nick_name} #{client}" # TODO remove
 
-            client.puts "OK"
+            connection.send_message "OK"
 
-            listen_for_messages(nick_name, client)
+            listen_for_messages(connection)
           end
         end
       end
@@ -64,24 +52,57 @@ class ChatServer
     threads.map &:join
   end
 
-  def listen_for_messages(sender, client)
+  # Make sure it matches the "ME IS user_name" format
+  def set_nick_name(connection, nick_name)
+    if nick_name[0..5] == "ME IS "
+      nick_name = nick_name[6..nick_name.length].strip
+
+      # Check if nickname/client already exists and for whitespace in nick_name
+      if @clients.has_key?(nick_name) || @clients.has_value?(connection) || nick_name.include?(" ")
+        connection.close_connection_on_error
+      end
+    else
+      connection.close_connection_on_error
+    end
+
+    nick_name
+  end
+
+  def listen_for_messages(connection)
     loop do
-      # gets returns nil at EOF (socket closed)
-      message = client.gets
-      if message.nil?
-        @clients.delete sender.to_sym
-        client.close
-        Thread.kill self
-      end
+      # all cleanup will be done in this method on socket closing and such
+      message = connection.read_from_client(@clients)
 
-      # Chomp here instead of method chaining above, chomping on nil = exception
-      message.chomp
+      # Read message and extract command
+      read_command(connection, message)
+    end
+  end
 
-      @clients.each do |other_name, other_client|
-        # Don't send it to yourself
-        other_client.puts "#{sender.to_s}: #{message}" unless other_client == client
-      end
+  def read_command(connection, message)
+    command = message.split[0]
+    if ["SEND", "BROADCAST"].include? command
+      # Remove the command from the message and keep userid if SENDing
+      message = message.split[1..message.length].join(" ")
+      send("#{command.downcase}_chat_message", connection, message)
+    else
+      connection.send_message "ERROR: invalid command"
+    end
+  end
 
+  def send_chat_message(connection, message)
+    # The first index should be the userid, check for validity
+    message_receiver = @clients[message.split[0].to_sym]
+    if message_receiver == nil
+      connection.send_message "ERROR: userid does not exist"
+    else
+      # Don't send the userid
+      message_receiver.send_message "#{connection.nick_name}: #{message.split[1..message.length].join(" ")}"
+    end
+  end
+
+  def broadcast_chat_message(connection, message)
+    @clients.each do |other_name, message_receiver|
+      message_receiver.send_message "#{connection.nick_name}: #{message}"
     end
   end
 

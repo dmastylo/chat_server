@@ -21,8 +21,6 @@ puts "Ports: ", ports
 
 ChatServer.new(ports)
 
-# ports.each { |port| servers << TCPServer.new(port) }
-
 # loop do
 #   servers.each do |server|
 #     Thread.fork(server.accept) do |client|
