@@ -1,36 +1,41 @@
 require 'socket'
 require 'thread'
+require './chat_server'
 
 abort('Not enough arguments!') if ARGV.length < 1
 
 ports = []
 servers = []
 
+# Filter the ports
 ARGV.each do |arg|
+  arg_num = arg.to_i
   if (arg_num > 1023 && arg_num < 65536)
-    ports << arg_num.to_i
+    ports << arg_num
   else
     puts "port number must be between 1024 and 65536"
   end
 end
 
-puts ports
+puts "Ports: ", ports
 
-ports.each { |port| servers << TCPServer.new(port) }
+ChatServer.new(ports)
 
-loop do
-  servers.each do |server|
-    Thread.fork(server.accept) do |client|
+# ports.each { |port| servers << TCPServer.new(port) }
 
-      client.puts("Hey, I'm a Ruby Chat server")
-      while (input = client.gets)
-        puts input
-      end
-      client.puts("I'm disconnecting, bye")
-      client.close
-    end
-  end
-end
+# loop do
+#   servers.each do |server|
+#     Thread.fork(server.accept) do |client|
+
+#       client.puts("Hey, I'm a Ruby Chat server")
+#       while (input = client.gets)
+#         puts input
+#       end
+#       client.puts("I'm disconnecting, bye")
+#       client.close
+#     end
+#   end
+# end
 
 # Connecting with TCPSocket to see if its open
 # threads = []
