@@ -7,7 +7,8 @@ abort('Not enough arguments!') if ARGV.length < 1
 ports = []
 servers = []
 
-# Filter the ports
+# Filter the verbose arg and ports
+verbose = ARGV.delete("-v")
 ARGV.each do |arg|
   arg_num = arg.to_i
   if (arg_num > 1023 && arg_num < 65536)
@@ -19,7 +20,7 @@ end
 
 puts "Ports: ", ports
 
-ChatServer.new(ports)
+ChatServer.new(ports, verbose)
 
 # loop do
 #   servers.each do |server|

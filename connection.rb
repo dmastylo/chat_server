@@ -1,4 +1,5 @@
 class Connection
+
   attr_accessor :nick_name, :client
 
   def initialize(nick_name, client)
@@ -30,4 +31,5 @@ class Connection
   def send_message(message)
     client.puts message
   end
+
 end
