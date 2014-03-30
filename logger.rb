@@ -14,6 +14,8 @@ class Logger
       message = "SENT to #{host_name}: #{message}"
     elsif state == "receive"
       message = "RCVD from #{host_name}: #{message}"
+    elsif state == "leave"
+      message = "#{host_name} (#{connection.nick_name}) has left"
     end
 
     puts message

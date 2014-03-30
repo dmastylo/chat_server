@@ -7,24 +7,19 @@ class Connection
     @client = client
   end
 
+  # TODO: this shouldn't close the client connection
   def close_connection_on_error
     send_message "ERROR"
     client.close
     Thread.kill self
   end
 
-  # read messages from clients, and cleanup if the socket is closed
-  # if client set a username then we have to clean up from clients
-  def read_from_client(clients = nil)
+  def read_from_client
+    # Returns nil on closed socket
     message = client.gets
-    if message.nil?
-      clients.delete nick_name.to_sym if nick_name
-      client.close
-      Thread.kill self
-    end
 
     # Chomp here instead of method chaining above b/c chomp on nil = exception
-    message.chomp
+    message.chomp unless message.nil?
   end
 
   # send a message from the server to the client

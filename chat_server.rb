@@ -39,7 +39,8 @@ private
             connection = Connection.new(nil, client)
 
             send_message(connection, "Enter your username") # TODO remove
-            set_nick_name(connection, connection.read_from_client)
+            message = receive_message(connection)
+            set_nick_name(connection, message)
 
             listen_for_messages(connection)
           end
@@ -52,8 +53,6 @@ private
 
   # Make sure it matches the "ME IS user_name" format
   def set_nick_name(connection, nick_name)
-    @logger.log(connection, nick_name, "receive")
-
     if nick_name[0..5] == "ME IS "
       nick_name = nick_name[6..nick_name.length].strip
 
@@ -74,8 +73,7 @@ private
   def listen_for_messages(connection)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message = connection.read_from_client(@clients)
-      @logger.log(connection, message, "receive")
+      message = receive_message(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -84,6 +82,7 @@ private
 
   def read_command(connection, message)
     command = message.split[0]
+
     if ["SEND", "BROADCAST"].include? command
       # Remove the command from the message and keep userid if SENDing
       message = message.split[1..message.length].join(" ")
@@ -108,6 +107,21 @@ private
     @clients.each do |other_name, message_receiver|
       send_message(message_receiver, "#{connection.nick_name}: #{message}")
     end
+  end
+
+  def receive_message(connection)
+    message = connection.read_from_client
+    if message.nil?
+      @logger.log(connection, message, "leave")
+
+      # Clean up the client and connection
+      @clients.delete connection.nick_name.to_sym
+      connection.client.close
+      Thread.kill self
+    end
+
+    @logger.log(connection, message, "receive")
+    message
   end
 
   def send_message(connection, message)
