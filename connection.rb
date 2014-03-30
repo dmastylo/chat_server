@@ -7,13 +7,6 @@ class Connection
     @client = client
   end
 
-  # TODO: this shouldn't close the client connection
-  def close_connection_on_error
-    send_message "ERROR"
-    client.close
-    Thread.kill self
-  end
-
   def read_from_client
     # Returns nil on closed socket
     message = client.gets

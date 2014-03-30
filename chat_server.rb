@@ -12,6 +12,7 @@ class ChatServer
     @clients = {}
     @logger = Logger.new(verbose)
 
+    # Create a UDPSocket and TCPServer on each port
     ports.each do |port|
       udp_server = UDPSocket.new
       udp_server.bind('localhost', port)
@@ -39,8 +40,7 @@ private
             connection = Connection.new(nil, client)
 
             send_message(connection, "Enter your username") # TODO remove
-            message = receive_message(connection)
-            set_nick_name(connection, message)
+            set_nick_name(connection)
 
             listen_for_messages(connection)
           end
@@ -51,17 +51,25 @@ private
     threads.map &:join
   end
 
-  # Make sure it matches the "ME IS user_name" format
-  def set_nick_name(connection, nick_name)
-    if nick_name[0..5] == "ME IS "
-      nick_name = nick_name[6..nick_name.length].strip
+  def set_nick_name(connection)
+    nick_name = nil
 
-      # Check if nickname/client already exists and for whitespace in nick_name
-      if @clients.has_key?(nick_name) || @clients.has_value?(connection) || nick_name.include?(" ")
-        connection.close_connection_on_error
+    while nick_name.nil? do
+      nick_name = receive_message(connection)
+
+      # Make sure it matches the "ME IS user_name" format
+      if nick_name[0..5] == "ME IS "
+        nick_name = nick_name[6..nick_name.length].strip
+
+        # Check if nickname/client already exists and for whitespace in nick_name
+        if @clients.has_key?(nick_name) || @clients.has_value?(connection) || nick_name.include?(" ")
+          send_message(connection, "ERROR")
+          nick_name = nil
+        end
+      else
+        send_message(connection, "ERROR")
+        nick_name = nil
       end
-    else
-      connection.close_connection_on_error
     end
 
     connection.nick_name = nick_name
