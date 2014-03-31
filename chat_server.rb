@@ -40,7 +40,8 @@ private
       server_threads << Thread.new do
         loop do
           connection_threads << Thread.start(tcp_server.accept) do |client|
-            # No nickname specified yet
+            # I'm worried that this might associate the wrong thread to a client
+            # if two connections are created very close to each other
             connection = TCPConnection.new(nil, client, connection_threads.last)
 
             send_message_to_client(connection, "Enter your username") # TODO remove
