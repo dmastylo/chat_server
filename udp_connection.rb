@@ -6,7 +6,7 @@ class UDPConnection < Connection
 
   def initialize(socket, nick_name, client)
     @socket = socket
-    super(nick_name, client)
+    super(nick_name, client, nil)
   end
 
   # TODO: change 1024

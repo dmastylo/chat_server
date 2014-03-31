@@ -30,15 +30,16 @@ class ChatServer
 private
 
   def run
-    threads = []
+    server_threads = []
 
     # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
-      threads << Thread.new do
+      server_threads << Thread.new do
         loop do
-          Thread.start(tcp_server.accept) do |client|
-            connection = TCPConnection.new(nil, client)
+          client = tcp_server.accept
+          thread = Thread.new do
+            connection = TCPConnection.new(nil, client, thread)
 
             set_tcp_nick_name(connection)
 
@@ -72,25 +73,19 @@ private
     # end
 
     @udp_servers.map do |udp_server|
-      threads << Thread.new do
+      server_threads << Thread.new do
         loop do
           # No nickname specified yet
           connection = UDPConnection.new(udp_server, nil, nil)
-          # nick_name = receive_message_from_client(connection)
-          message = set_udp_nick_name(connection)
 
-          # puts "New packets"
-          # unless @udp_clients.include? client[1]
-          #   puts "new client doe"
-          #   @udp_clients << client[1]
-          # end
+          message = set_udp_nick_name(connection)
 
           listen_for_messages(connection, message)
         end
       end
     end
 
-    threads.map &:join
+    server_threads.map &:join
   end
 
   def set_tcp_nick_name(connection)
@@ -169,7 +164,8 @@ private
   def listen_for_messages(connection, message = nil)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message ||= receive_message_from_client(connection)
+      # message ||= receive_message_from_client(connection)
+      message = receive_message_from_client(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -215,8 +211,7 @@ private
       @clients.delete connection.nick_name.to_sym if connection.nick_name
       connection.client.close
 
-      # TODO: This is actually wrong, fix this, zombie thread
-      Thread.kill self
+      Thread.kill connection.thread if connection.thread
     end
 
     Logger.log(connection, message, "receive")
