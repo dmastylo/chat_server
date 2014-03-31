@@ -5,7 +5,7 @@ require './logger'
 
 class ChatServer
   # clients is a hash -> { nick_name: Connection class }
-  attr_accessor :udp_servers, :tcp_servers, :clients, :logger
+  attr_accessor :udp_servers, :tcp_servers, :clients
 
   def initialize(ports = {}, verbose, development_mode)
     # TODO remove this after done
@@ -14,7 +14,7 @@ class ChatServer
     @udp_servers = []
     @tcp_servers = []
     @clients = {}
-    @logger = Logger.new(verbose)
+    Logger.init(verbose)
 
     # Create a UDPSocket and TCPServer on each port
     ports.each do |port|
@@ -42,7 +42,7 @@ private
             # No nickname specified yet
             connection = TCPConnection.new(nil, client)
 
-            send_message(connection, "Enter your username") # TODO remove
+            send_message_to_client(connection, "Enter your username") # TODO remove
             set_nick_name(connection)
 
             listen_for_messages(connection)
@@ -89,8 +89,6 @@ private
 
           # Once we have a nick_name for the UDP connection we can delegate
           Thread.start(connection) do |connection|
-            # puts "From client: #{client.join(',')}, msg: '#{message}'"
-            # broadcast_udp_clients(udp_server, message, @udp_clients)
             listen_for_messages(connection)
           end
         end
@@ -104,7 +102,7 @@ private
     nick_name = nil
 
     while nick_name.nil? do
-      nick_name = receive_message(connection)
+      nick_name = receive_message_from_client(connection)
 
       # Make sure it matches the "ME IS user_name" format
       if nick_name[0..5] == "ME IS "
@@ -112,11 +110,11 @@ private
 
         # Check if nickname/client already exists and for whitespace in nick_name
         if @clients.has_key?(nick_name.to_sym) || @clients.has_value?(connection) || nick_name.include?(" ")
-          send_message(connection, "ERROR")
+          send_message_to_client(connection, "ERROR")
           nick_name = nil
         end
       else
-        send_message(connection, "ERROR")
+        send_message_to_client(connection, "ERROR")
         nick_name = nil
       end
     end
@@ -125,13 +123,13 @@ private
     @clients[nick_name.to_sym] = connection
     puts @clients
 
-    send_message(connection, "OK")
+    send_message_to_client(connection, "OK")
   end
 
   def listen_for_messages(connection)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message = receive_message(connection)
+      message = receive_message_from_client(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -146,7 +144,7 @@ private
       message = message.split[1..message.length].join(" ")
       send("#{command.downcase}_chat_message", connection, message)
     else
-      send_message(connection, "ERROR: invalid command")
+      send_message_to_client(connection, "ERROR: invalid command")
     end
   end
 
@@ -154,24 +152,24 @@ private
     # The first index should be the userid, check for validity
     message_receiver = @clients[message.split[0].to_sym]
     if message_receiver == nil
-      send_message(connection, "ERROR: userid does not exist")
+      send_message_to_client(connection, "ERROR: userid does not exist")
     else
       # Don't send the userid
-      send_message(message_receiver, "#{connection.nick_name}: #{message.split[1..message.length].join(" ")}")
+      send_message_to_client(message_receiver, "#{connection.nick_name}: #{message.split[1..message.length].join(" ")}")
     end
   end
 
   def broadcast_chat_message(connection, message)
     @clients.each do |other_name, message_receiver|
-      send_message(message_receiver, "#{connection.nick_name}: #{message}")
+      send_message_to_client(message_receiver, "#{connection.nick_name}: #{message}")
     end
   end
 
   # Handle input from the client and disconnect on a closed socket
-  def receive_message(connection)
+  def receive_message_from_client(connection)
     message = connection.read_from_client
     if message.nil?
-      @logger.log(connection, message, "leave")
+      Logger.log(connection, message, "leave")
 
       # Clean up the client and connection
       @clients.delete connection.nick_name.to_sym
@@ -181,13 +179,13 @@ private
       Thread.kill self
     end
 
-    @logger.log(connection, message, "receive")
+    Logger.log(connection, message, "receive")
     message
   end
 
-  def send_message(connection, message)
+  def send_message_to_client(connection, message)
     connection.send_message message
-    @logger.log(connection, message, "send")
+    Logger.log(connection, message, "send")
   end
 
 end

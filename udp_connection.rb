@@ -25,7 +25,7 @@ class UDPConnection < Connection
 
   # send a message from the server to the client
   def send_message(message)
-    @socket.send(message, 0, nil, @client)
+    @socket.send(message << "\n", 0, nil, @client)
   end
 
 end
