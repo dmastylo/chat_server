@@ -19,7 +19,6 @@ class UDPConnection < Connection
       @client = client_address[1]
     end
 
-    puts message
     message.chomp unless message.nil?
   end
 

@@ -8,7 +8,6 @@ class ChatServer
   attr_accessor :udp_servers, :tcp_servers, :clients
 
   def initialize(ports = {}, verbose, development_mode)
-    # TODO remove this after done
     Thread.abort_on_exception = true if development_mode
 
     @udp_servers = []
@@ -39,11 +38,9 @@ private
       threads << Thread.new do
         loop do
           Thread.start(tcp_server.accept) do |client|
-            # No nickname specified yet
             connection = TCPConnection.new(nil, client)
 
-            send_message_to_client(connection, "Enter your username") # TODO remove
-            set_nick_name(connection)
+            set_tcp_nick_name(connection)
 
             listen_for_messages(connection)
           end
@@ -79,7 +76,8 @@ private
         loop do
           # No nickname specified yet
           connection = UDPConnection.new(udp_server, nil, nil)
-          set_nick_name(connection)
+          # nick_name = receive_message_from_client(connection)
+          message = set_udp_nick_name(connection)
 
           # puts "New packets"
           # unless @udp_clients.include? client[1]
@@ -87,10 +85,7 @@ private
           #   @udp_clients << client[1]
           # end
 
-          # Once we have a nick_name for the UDP connection we can delegate
-          Thread.start(connection) do |connection|
-            listen_for_messages(connection)
-          end
+          listen_for_messages(connection, message)
         end
       end
     end
@@ -98,7 +93,7 @@ private
     threads.map &:join
   end
 
-  def set_nick_name(connection)
+  def set_tcp_nick_name(connection)
     nick_name = nil
 
     while nick_name.nil? do
@@ -126,10 +121,55 @@ private
     send_message_to_client(connection, "OK")
   end
 
-  def listen_for_messages(connection)
+  # Due to stateless nature of UDP it's difficult to use the same flow as TCP
+  # for listening. So we will return the message if it turns out the socket
+  # we're reading from already exists, that way listen_for_messages won't fire
+  # to receive more packets that we don't want yet
+  def set_udp_nick_name(connection)
+    nick_name = nil
+
+    while nick_name.nil? do
+      message = receive_message_from_client(connection)
+
+      # When a message is received, the udp_connection will set the client
+      # and if that client already exists in @clients, then the message being
+      # received is from a "connection" that's already established.
+      @clients.each do |client_nick_name, client|
+        if connection.client == client.client
+          connection = client
+
+          # if the nick_name hasn't been set on the existing connection then it
+          # was probably still in this loop to set the nick_name, so skip returning
+          return message if connection.nick_name
+        end
+      end
+
+      # Make sure it matches the "ME IS user_name" format
+      if message[0..5] == "ME IS "
+        nick_name = message[6..message.length].strip
+
+        # Check if nickname/client already exists and for whitespace in nick_name
+        if @clients.has_key?(nick_name.to_sym) || @clients.has_value?(connection) || nick_name.include?(" ")
+          send_message_to_client(connection, "ERROR")
+          nick_name = nil
+        end
+      else
+        send_message_to_client(connection, "ERROR")
+        nick_name = nil
+      end
+    end
+
+    connection.nick_name = nick_name
+    @clients[nick_name.to_sym] = connection
+    puts @clients
+
+    send_message_to_client(connection, "OK")
+  end
+
+  def listen_for_messages(connection, message = nil)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message = receive_message_from_client(connection)
+      message ||= receive_message_from_client(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -172,7 +212,7 @@ private
       Logger.log(connection, message, "leave")
 
       # Clean up the client and connection
-      @clients.delete connection.nick_name.to_sym
+      @clients.delete connection.nick_name.to_sym if connection.nick_name
       connection.client.close
 
       # TODO: This is actually wrong, fix this, zombie thread
