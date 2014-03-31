@@ -31,17 +31,15 @@ private
 
   def run
     server_threads = []
-    connection_threads = []
 
     # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
       server_threads << Thread.new do
         loop do
-          connection_threads << Thread.start(tcp_server.accept) do |client|
-            # I'm worried that this might associate the wrong thread to a client
-            # if two connections are created very close to each other
-            connection = TCPConnection.new(nil, client, connection_threads.last)
+          client = tcp_server.accept
+          thread = Thread.new do
+            connection = TCPConnection.new(nil, client, thread)
 
             set_tcp_nick_name(connection)
 
@@ -171,7 +169,8 @@ private
   def listen_for_messages(connection, message = nil)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message ||= receive_message_from_client(connection)
+      # message ||= receive_message_from_client(connection)
+      message = receive_message_from_client(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -217,7 +216,6 @@ private
       @clients.delete connection.nick_name.to_sym if connection.nick_name
       connection.client.close
 
-      # TODO: This is actually wrong, fix this, zombie thread
       Thread.kill connection.thread
     end
 
