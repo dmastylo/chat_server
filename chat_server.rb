@@ -31,16 +31,17 @@ class ChatServer
 private
 
   def run
-    threads = []
+    server_threads = []
+    connection_threads = []
 
     # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
-      threads << Thread.new do |thread|
+      server_threads << Thread.new do
         loop do
-          Thread.start(tcp_server.accept) do |client|
+          connection_threads << Thread.start(tcp_server.accept) do |client|
             # No nickname specified yet
-            connection = TCPConnection.new(nil, client, thread)
+            connection = TCPConnection.new(nil, client)
 
             send_message_to_client(connection, "Enter your username") # TODO remove
             set_nick_name(connection)
@@ -75,10 +76,10 @@ private
     # end
 
     @udp_servers.map do |udp_server|
-      threads << Thread.new do |thread|
+      server_threads << Thread.new do
         loop do
           # No nickname specified yet
-          connection = UDPConnection.new(udp_server, nil, nil, thread)
+          connection = UDPConnection.new(udp_server, nil, nil)
           set_nick_name(connection)
 
           # puts "New packets"
@@ -88,14 +89,14 @@ private
           # end
 
           # Once we have a nick_name for the UDP connection we can delegate
-          Thread.start(connection) do |connection|
+          connection_threads << Thread.start(connection) do |connection|
             listen_for_messages(connection)
           end
         end
       end
     end
 
-    threads.map &:join
+    server_threads.map &:join
   end
 
   def set_nick_name(connection)
