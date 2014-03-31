@@ -1,12 +1,16 @@
 require 'socket'
-require './connection'
+require './tcp_connection'
+require './udp_connection'
 require './logger'
 
 class ChatServer
   # clients is a hash -> { nick_name: Connection class }
   attr_accessor :udp_servers, :tcp_servers, :clients, :logger
 
-  def initialize(ports = {}, verbose)
+  def initialize(ports = {}, verbose, development_mode)
+    # TODO remove this after done
+    Thread.abort_on_exception = true if development_mode
+
     @udp_servers = []
     @tcp_servers = []
     @clients = {}
@@ -15,7 +19,7 @@ class ChatServer
     # Create a UDPSocket and TCPServer on each port
     ports.each do |port|
       udp_server = UDPSocket.new
-      udp_server.bind('localhost', port)
+      udp_server.bind(nil, port)
       @udp_servers << udp_server
 
       @tcp_servers << TCPServer.new(port)
@@ -29,7 +33,6 @@ private
   def run
     threads = []
 
-    # TODO: UDP Server
     # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
@@ -37,7 +40,7 @@ private
         loop do
           Thread.start(tcp_server.accept) do |client|
             # No nickname specified yet
-            connection = Connection.new(nil, client)
+            connection = TCPConnection.new(nil, client)
 
             send_message(connection, "Enter your username") # TODO remove
             set_nick_name(connection)
@@ -48,7 +51,63 @@ private
       end
     end
 
+    # OLD
+    # @udp_servers.map do |udp_server|
+    #   threads << Thread.new do
+    #     loop do
+    #       message, client_address = udp_server.recvfrom(1024)
+    #       Thread.start(client_address) do |client|
+    #         # No nickname specified yet
+    #         connection = UDPConnection.new(nil, client)
+    #         set_nick_name(connection)
+
+    #         puts "New packets"
+    #         unless @udp_clients.include? client[1]
+    #           puts "new client doe"
+    #           @udp_clients << client[1]
+    #         end
+
+    #         puts "From client: #{client.join(',')}, msg: '#{message}'"
+    #         broadcast_udp_clients(udp_server, message, @udp_clients)
+    #       end
+    #     end
+    #   end
+    # end
+
+    @udp_servers.map do |udp_server|
+      threads << Thread.new do
+        loop do
+          # No nickname specified yet
+          connection = UDPConnection.new(udp_server, nil, nil)
+          set_nick_name(connection)
+
+          # puts "New packets"
+          # unless @udp_clients.include? client[1]
+          #   puts "new client doe"
+          #   @udp_clients << client[1]
+          # end
+
+          # Once we have a nick_name for the UDP connection we can delegate
+          Thread.start(connection) do |connection|
+            # puts "From client: #{client.join(',')}, msg: '#{message}'"
+            # broadcast_udp_clients(udp_server, message, @udp_clients)
+            listen_for_messages(connection)
+          end
+        end
+      end
+    end
+
     threads.map &:join
+  end
+
+  # TODO clean up!
+  def broadcast_udp_clients(socket, data, clients)
+    puts "broadcasting"
+    puts clients
+    puts "clients??"
+    clients.each do |client|
+      socket.send(data, 0, nil, client)
+    end
   end
 
   def set_nick_name(connection)
@@ -62,7 +121,7 @@ private
         nick_name = nick_name[6..nick_name.length].strip
 
         # Check if nickname/client already exists and for whitespace in nick_name
-        if @clients.has_key?(nick_name) || @clients.has_value?(connection) || nick_name.include?(" ")
+        if @clients.has_key?(nick_name.to_sym) || @clients.has_value?(connection) || nick_name.include?(" ")
           send_message(connection, "ERROR")
           nick_name = nil
         end
@@ -74,6 +133,7 @@ private
 
     connection.nick_name = nick_name
     @clients[nick_name.to_sym] = connection
+    puts @clients
 
     send_message(connection, "OK")
   end
@@ -117,6 +177,7 @@ private
     end
   end
 
+  # Handle input from the client and disconnect on a closed socket
   def receive_message(connection)
     message = connection.read_from_client
     if message.nil?
@@ -125,6 +186,8 @@ private
       # Clean up the client and connection
       @clients.delete connection.nick_name.to_sym
       connection.client.close
+
+      # TODO: This is actually wrong, fix this, zombie thread
       Thread.kill self
     end
 

@@ -2,13 +2,14 @@ require 'socket'
 require 'thread'
 require './chat_server'
 
-abort('Not enough arguments!') if ARGV.length < 1
+abort('Not enough arguments! Please specify the ports you want, and, optionally, a -v flag for logging.') if ARGV.length < 1
 
 ports = []
 servers = []
 
-# Filter the verbose arg and ports
+# Filter the args
 verbose = ARGV.delete("-v")
+development_mode = ARGV.delete("-d")
 ARGV.each do |arg|
   arg_num = arg.to_i
   if (arg_num > 1023 && arg_num < 65536)
@@ -18,23 +19,11 @@ ARGV.each do |arg|
   end
 end
 
+abort('No ports specified.') if ports.length < 1
+
 puts "Ports: ", ports
 
-ChatServer.new(ports, verbose)
-
-# loop do
-#   servers.each do |server|
-#     Thread.fork(server.accept) do |client|
-
-#       client.puts("Hey, I'm a Ruby Chat server")
-#       while (input = client.gets)
-#         puts input
-#       end
-#       client.puts("I'm disconnecting, bye")
-#       client.close
-#     end
-#   end
-# end
+ChatServer.new(ports, verbose, development_mode)
 
 # Connecting with TCPSocket to see if its open
 # threads = []

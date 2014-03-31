@@ -4,6 +4,7 @@ class Logger
     @verbose = verbose
   end
 
+  # TODO generic for TCP, UDP
   def log(connection, message, state)
     return unless @verbose
 
