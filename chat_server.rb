@@ -100,16 +100,6 @@ private
     threads.map &:join
   end
 
-  # TODO clean up!
-  def broadcast_udp_clients(socket, data, clients)
-    puts "broadcasting"
-    puts clients
-    puts "clients??"
-    clients.each do |client|
-      socket.send(data, 0, nil, client)
-    end
-  end
-
   def set_nick_name(connection)
     nick_name = nil
 
