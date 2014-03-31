@@ -76,14 +76,9 @@ private
       server_threads << Thread.new do
         loop do
           # No nickname specified yet
-          connection = UDPConnection.new(udp_server, nil, nil, nil)
-          message = set_udp_nick_name(connection)
+          connection = UDPConnection.new(udp_server, nil, nil)
 
-          # puts "New packets"
-          # unless @udp_clients.include? client[1]
-          #   puts "new client doe"
-          #   @udp_clients << client[1]
-          # end
+          message = set_udp_nick_name(connection)
 
           listen_for_messages(connection, message)
         end
@@ -216,7 +211,7 @@ private
       @clients.delete connection.nick_name.to_sym if connection.nick_name
       connection.client.close
 
-      Thread.kill connection.thread
+      Thread.kill connection.thread if connection.thread
     end
 
     Logger.log(connection, message, "receive")

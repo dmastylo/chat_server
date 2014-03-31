@@ -4,9 +4,9 @@ class UDPConnection < Connection
 
   attr_accessor :socket
 
-  def initialize(socket, nick_name, client, thread)
+  def initialize(socket, nick_name, client)
     @socket = socket
-    super(nick_name, client, thread)
+    super(nick_name, client, nil)
   end
 
   # TODO: change 1024
