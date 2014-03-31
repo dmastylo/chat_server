@@ -10,10 +10,11 @@ class ChatServer
   def initialize(ports = {}, verbose, development_mode)
     Thread.abort_on_exception = true if development_mode
 
+    Logger.init(verbose)
+
     @udp_servers = []
     @tcp_servers = []
     @clients = {}
-    Logger.init(verbose)
 
     # Create a UDPSocket and TCPServer on each port
     ports.each do |port|
@@ -41,46 +42,44 @@ private
           thread = Thread.new do
             connection = TCPConnection.new(nil, client, thread)
 
-            set_tcp_nick_name(connection)
-
             listen_for_messages(connection)
           end
         end
       end
     end
 
-    # OLD
-    # @udp_servers.map do |udp_server|
-    #   threads << Thread.new do
-    #     loop do
-    #       message, client_address = udp_server.recvfrom(1024)
-    #       Thread.start(client_address) do |client|
-    #         # No nickname specified yet
-    #         connection = UDPConnection.new(nil, client)
-    #         set_nick_name(connection)
-
-    #         puts "New packets"
-    #         unless @udp_clients.include? client[1]
-    #           puts "new client doe"
-    #           @udp_clients << client[1]
-    #         end
-
-    #         puts "From client: #{client.join(',')}, msg: '#{message}'"
-    #         broadcast_udp_clients(udp_server, message, @udp_clients)
-    #       end
-    #     end
-    #   end
-    # end
-
     @udp_servers.map do |udp_server|
       server_threads << Thread.new do
         loop do
-          # No nickname specified yet
-          connection = UDPConnection.new(udp_server, nil, nil)
+          message, client_address = udp_server.recvfrom(1024)
+          message.chomp
+          client = client_address[1]
+          client_name = "#{client_address[2]}:#{client_address[1]}"
 
-          message = set_udp_nick_name(connection)
+          puts client_address
 
-          listen_for_messages(connection, message)
+          exists = false
+
+          connection = UDPConnection.new(nil, client, client_name, udp_server)
+
+          @clients.each do |other_client_nick_name, other_client|
+            if client == other_client.client
+              connection = other_client
+              puts "exists"
+              exists = true
+
+              if connection.nick_name
+                read_command(connection, message)
+              else
+                set_nick_name(connection, message)
+              end
+            end
+          end
+
+          unless exists
+            set_nick_name(connection, message)
+          end
+
         end
       end
     end
@@ -88,25 +87,11 @@ private
     server_threads.map &:join
   end
 
-  def set_tcp_nick_name(connection)
-    nick_name = nil
-
-    while nick_name.nil? do
-      nick_name = receive_message_from_client(connection)
-
-      # Make sure it matches the "ME IS user_name" format
-      if nick_name[0..5] == "ME IS "
-        nick_name = nick_name[6..nick_name.length].strip
-
-        # Check if nickname/client already exists and for whitespace in nick_name
-        if @clients.has_key?(nick_name.to_sym) || @clients.has_value?(connection) || nick_name.include?(" ")
-          send_message_to_client(connection, "ERROR")
-          nick_name = nil
-        end
-      else
-        send_message_to_client(connection, "ERROR")
-        nick_name = nil
-      end
+  def set_nick_name(connection, message)
+    nick_name = nick_name_available?(connection, message)
+    if nick_name.nil?
+      send_message_to_client(connection, "ERROR")
+      return nil
     end
 
     connection.nick_name = nick_name
@@ -116,55 +101,23 @@ private
     send_message_to_client(connection, "OK")
   end
 
-  # Due to stateless nature of UDP it's difficult to use the same flow as TCP
-  # for listening. So we will return the message if it turns out the socket
-  # we're reading from already exists, that way listen_for_messages won't fire
-  # to receive more packets that we don't want yet
-  def set_udp_nick_name(connection)
-    nick_name = nil
+  def nick_name_available?(connection, message)
+    return nil if message[0..5] != "ME IS "
 
-    while nick_name.nil? do
-      message = receive_message_from_client(connection)
+    nick_name = message[6..message.length].strip
 
-      # When a message is received, the udp_connection will set the client
-      # and if that client already exists in @clients, then the message being
-      # received is from a "connection" that's already established.
-      @clients.each do |client_nick_name, client|
-        if connection.client == client.client
-          connection = client
+    return nil if nick_name.nil? ||
+                  nick_name.empty? ||
+                  nick_name.include?(" ") ||
+                  @clients.has_key?(nick_name.to_sym) ||
+                  @clients.has_value?(connection)
 
-          # if the nick_name hasn't been set on the existing connection then it
-          # was probably still in this loop to set the nick_name, so skip returning
-          return message if connection.nick_name
-        end
-      end
-
-      # Make sure it matches the "ME IS user_name" format
-      if message[0..5] == "ME IS "
-        nick_name = message[6..message.length].strip
-
-        # Check if nickname/client already exists and for whitespace in nick_name
-        if @clients.has_key?(nick_name.to_sym) || @clients.has_value?(connection) || nick_name.include?(" ")
-          send_message_to_client(connection, "ERROR")
-          nick_name = nil
-        end
-      else
-        send_message_to_client(connection, "ERROR")
-        nick_name = nil
-      end
-    end
-
-    connection.nick_name = nick_name
-    @clients[nick_name.to_sym] = connection
-    puts @clients
-
-    send_message_to_client(connection, "OK")
+    nick_name
   end
 
-  def listen_for_messages(connection, message = nil)
+  def listen_for_messages(connection)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      # message ||= receive_message_from_client(connection)
       message = receive_message_from_client(connection)
 
       # Read message and extract command
@@ -173,6 +126,10 @@ private
   end
 
   def read_command(connection, message)
+    unless connection.nick_name
+      return set_nick_name(connection, message)
+    end
+
     command = message.split[0]
 
     if ["SEND", "BROADCAST"].include? command
