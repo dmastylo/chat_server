@@ -36,11 +36,11 @@ private
     # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
-      threads << Thread.new do
+      threads << Thread.new do |thread|
         loop do
           Thread.start(tcp_server.accept) do |client|
             # No nickname specified yet
-            connection = TCPConnection.new(nil, client)
+            connection = TCPConnection.new(nil, client, thread)
 
             send_message_to_client(connection, "Enter your username") # TODO remove
             set_nick_name(connection)
@@ -75,10 +75,10 @@ private
     # end
 
     @udp_servers.map do |udp_server|
-      threads << Thread.new do
+      threads << Thread.new do |thread|
         loop do
           # No nickname specified yet
-          connection = UDPConnection.new(udp_server, nil, nil)
+          connection = UDPConnection.new(udp_server, nil, nil, thread)
           set_nick_name(connection)
 
           # puts "New packets"
@@ -176,7 +176,7 @@ private
       connection.client.close
 
       # TODO: This is actually wrong, fix this, zombie thread
-      Thread.kill self
+      Thread.kill connection.thread
     end
 
     Logger.log(connection, message, "receive")
