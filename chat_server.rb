@@ -50,7 +50,6 @@ private
     @udp_servers.map do |udp_server|
       server_threads << Thread.new do
         loop do
-          # TODO: clean this up
           connection = UDPConnection.new(nil, nil, nil, udp_server)
           message = connection.read_from_client
 
@@ -98,7 +97,7 @@ private
   def nick_name_available?(connection, message)
     return nil if message[0..5] != "ME IS "
 
-    nick_name = message[6..message.length].strip
+    nick_name = message[6..message.length].strip.downcase
 
     return nil if nick_name.nil? ||
                   nick_name.empty? ||
@@ -142,13 +141,13 @@ private
       send_message_to_client(connection, "ERROR: userid does not exist")
     else
       # Don't send the userid
-      send_message_to_client(message_receiver, "#{connection.nick_name}: #{message.split[1..message.length].join(" ")}")
+      send_message_to_client(message_receiver, "FROM #{connection.nick_name}\n #{message.split[1..message.length].join(" ")}")
     end
   end
 
   def broadcast_chat_message(connection, message)
     @clients.each do |other_name, message_receiver|
-      send_message_to_client(message_receiver, "#{connection.nick_name}: #{message}")
+      send_message_to_client(message_receiver, "BROADCAST FROM #{connection.nick_name}\n #{message}")
     end
   end
 
@@ -170,8 +169,19 @@ private
   end
 
   def send_message_to_client(connection, message)
+    # chunked_message = chunked_message(message)
+    # chunked_message.each { |msg| connection.send_message msg}
     connection.send_message message
     Logger.log(connection, message, "send")
+    # Logger.log(connection, chunked_message.join("\n"), "send")
+  end
+
+  def chunked_message(message)
+    if message.length > 99
+      [message.insert(0, "C#{message.length}\n")]
+    else
+      [message.insert(0, "#{message.length}\n")]
+    end
   end
 
 end

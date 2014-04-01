@@ -6,18 +6,21 @@ module Logger
       @verbose = verbose
     end
 
-    # TODO generic for TCP, UDP
     def log(connection, message, state)
       return unless @verbose
 
-      host_name = connection.client_full_address
+      if connection.nick_name
+        host_name = "#{connection.nick_name} (#{connection.client_full_address})"
+      else
+        host_name = connection.client_full_address
+      end
 
       if state == "send"
-        message = "SENT to #{host_name}: #{message}"
+        message = "SENT to #{host_name}:\n#{message}"
       elsif state == "receive"
-        message = "RCVD from #{host_name}: #{message}"
+        message = "RCVD from #{host_name}:\n#{message}"
       elsif state == "leave"
-        message = "#{host_name} (#{connection.nick_name}) has left"
+        message = "#{host_name} (#{connection.nick_name}) HAS LEFT"
       end
 
       puts message
