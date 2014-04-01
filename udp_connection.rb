@@ -7,7 +7,7 @@ class UDPConnection < Connection
   def initialize(nick_name, client, client_full_address, socket)
     @socket = socket
     @client_full_address = client_full_address
-    super(nick_name, client, nil)
+    super(nick_name, client)
   end
 
   def read_from_client
