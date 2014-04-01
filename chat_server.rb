@@ -1,6 +1,7 @@
 require 'socket'
 require './tcp_connection'
 require './udp_connection'
+require './message'
 require './logger'
 
 class ChatServer
@@ -113,9 +114,17 @@ private
       # all cleanup will be done in this method on socket closing and such
       message = receive_message_from_tcp_client(connection)
 
-      # Read message and extract command
-      read_command(connection, message)
+      # If we're still listening for more of the message, don't read for commands
+      if connection.processing_message
+        process_message(connection, message)
+      else
+        # Read message and extract command
+        read_command(connection, message)
+      end
     end
+  end
+
+  def process_message(connection, message)
   end
 
   def read_command(connection, message)
@@ -125,27 +134,103 @@ private
 
     command = message.split[0]
 
-    if ["SEND", "BROADCAST"].include? command
-      # Remove the command from the message and keep userid if SENDing
-      message = message.split[1..message.length].join(" ")
-      send("#{command.downcase}_chat_message", connection, message)
+    if command == "SEND"
+      length = read_message_length(connection)
+
+      if length > 0
+        # Remove the command from the message and keep userids
+        connection.last_command = command
+        connection.receivers = message.split[1..message.split.length]
+
+        dope_message = Message.new(connection, length)
+        while connection.processing_chunk do
+          dope_message.construct_chunk
+          send_chat_message(connection, connection.receivers, dope_message.message)
+          # Next line should new chunk length
+          # TODO
+        end
+
+        if connection.processing_message
+          dope_message.construct_message
+          send_chat_message(connection, connection.receivers, dope_message.message)
+        end
+      else
+        connection.processing_message = false
+        connection.processing_chunk = false
+        send_message_to_client(connection, "ERROR: invalid message length")
+      end
+    elsif command == "BROADCAST"
+    elsif command == "LOGOUT"
+    elsif message[0..7] == "WHO HERE"
     else
       send_message_to_client(connection, "ERROR: invalid command")
     end
   end
 
-  def send_chat_message(connection, message)
-    # The first index should be the userid, check for validity
-    message_receiver = @clients[message.split[0].to_sym]
-    if message_receiver == nil
-      send_message_to_client(connection, "ERROR: userid does not exist")
+  def read_message_length(connection)
+    # Read the length of the message
+    length = receive_message_from_tcp_client(connection)
+
+    # Check if it's a regular messaged or a chunked message (ugh)
+    match = length.match(/C(\d*)/)
+    if match.nil?
+      length = length.to_i
+      connection.processing_message = true
     else
-      # Don't send the userid
-      send_message_to_client(message_receiver, "FROM #{connection.nick_name}\n #{message.split[1..message.length].join(" ")}")
+      connection.processing_chunk = true
+      connection.chunk_command = message.first.split.first
+      length = match[1].to_i
     end
+
+    length
   end
 
-  def broadcast_chat_message(connection, message)
+  def send_chat_message(connection, receivers, message)
+    message_receivers = receivers.map { |receiver| @clients[receiver.to_sym] }.compact
+    message_header = "FROM #{connection.nick_name}\n"
+    message.prepend message_header
+
+    if message_receivers.empty?
+      send_message_to_client(connection, "ERROR: userid(s) do not exist")
+    else
+      message_receivers.each do |message_receiver|
+        send_message_to_client(message_receiver, message)
+      end
+    end
+
+    connection.reset_status
+
+    # It's an annoying chunked message
+    # if message[1] =~ /C\d*/
+    #   connection.processing_chunk = true
+    #   connection.chunk_command = message.first.split.first
+
+    #   # Construct the chunks
+    #   chunks = ["#{message[1]}\n"]
+
+    #   message.drop(2).each do |line|
+    #     chunks << "" if line =~ /C\d*/
+    #     chunks.last << "#{line}\n"
+
+    #     # Already have full chunked message, so no more chunks should arrive.
+    #     # Other messages will be new commands
+    #     if line =~ /C0/
+    #       connection.processing_chunk = false
+    #       connection.chunk_command = nil
+    #       break
+    #     end
+    #   end
+    # else
+    #   # TODO
+    #   # send_message = message.split[1..message.length].join(" ").split("\n")
+
+    #   # Don't send the userid
+    #   # send_message_to_client(message_receiver, "#{send_message}")
+    # end
+
+  end
+
+  def broadcast_chat_message(connection, receiver, message)
     @clients.each do |other_name, message_receiver|
       send_message_to_client(message_receiver, "BROADCAST FROM #{connection.nick_name}\n #{message}")
     end
@@ -169,19 +254,8 @@ private
   end
 
   def send_message_to_client(connection, message)
-    # chunked_message = chunked_message(message)
-    # chunked_message.each { |msg| connection.send_message msg}
     connection.send_message message
     Logger.log(connection, message, "send")
-    # Logger.log(connection, chunked_message.join("\n"), "send")
-  end
-
-  def chunked_message(message)
-    if message.length > 99
-      [message.insert(0, "C#{message.length}\n")]
-    else
-      [message.insert(0, "#{message.length}\n")]
-    end
   end
 
 end
