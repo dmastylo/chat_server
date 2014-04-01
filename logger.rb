@@ -10,8 +10,7 @@ module Logger
     def log(connection, message, state)
       return unless @verbose
 
-      host_name = connection.client.peeraddr(:hostname)
-      host_name = "#{host_name[2]}:#{host_name[1]}"
+      host_name = connection.client_full_address
 
       if state == "send"
         message = "SENT to #{host_name}: #{message}"

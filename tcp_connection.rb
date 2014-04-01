@@ -15,4 +15,9 @@ class TCPConnection < Connection
     client.puts message
   end
 
+  def client_full_address
+    host_name = client.peeraddr(:hostname)
+    "#{host_name[2]}:#{host_name[1]}"
+  end
+
 end

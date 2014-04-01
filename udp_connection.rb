@@ -2,12 +2,20 @@ require './connection'
 
 class UDPConnection < Connection
 
-  attr_accessor :socket
+  attr_accessor :client_full_address
 
-  def initialize(nick_name, client, client_name, socket)
+  def initialize(nick_name, client, client_full_address, socket)
     @socket = socket
-    @client_name = client_name
+    @client_full_address = client_full_address
     super(nick_name, client, nil)
+  end
+
+  def read_from_client
+    message, client_address = @socket.recvfrom(1024)
+    @client = client_address[1]
+    @client_full_address = "#{client_address[2]}:#{client_address[1]}"
+
+    message.chomp
   end
 
   # send a message from the server to the client

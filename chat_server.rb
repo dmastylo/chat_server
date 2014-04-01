@@ -9,7 +9,6 @@ class ChatServer
 
   def initialize(ports = {}, verbose, development_mode)
     Thread.abort_on_exception = true if development_mode
-
     Logger.init(verbose)
 
     @udp_servers = []
@@ -51,32 +50,27 @@ private
     @udp_servers.map do |udp_server|
       server_threads << Thread.new do
         loop do
-          message, client_address = udp_server.recvfrom(1024)
-          message.chomp
-          client = client_address[1]
-          client_name = "#{client_address[2]}:#{client_address[1]}"
+          # TODO: clean this up
+          connection = UDPConnection.new(nil, nil, nil, udp_server)
+          message = connection.read_from_client
 
-          puts client_address
+          Logger.log(connection, message, "receive")
 
           exists = false
-
-          connection = UDPConnection.new(nil, client, client_name, udp_server)
-
-          @clients.each do |other_client_nick_name, other_client|
-            if client == other_client.client
+          @clients.each do |_, other_client|
+            if connection.client_full_address == other_client.client_full_address
               connection = other_client
               puts "exists"
               exists = true
-
-              if connection.nick_name
-                read_command(connection, message)
-              else
-                set_nick_name(connection, message)
-              end
+              break
             end
           end
 
-          unless exists
+          # Already received message from this UDP connection
+          # and it has already set their nickname
+          if exists && connection.nick_name
+            read_command(connection, message)
+          else
             set_nick_name(connection, message)
           end
 
@@ -118,7 +112,7 @@ private
   def listen_for_messages(connection)
     loop do
       # all cleanup will be done in this method on socket closing and such
-      message = receive_message_from_client(connection)
+      message = receive_message_from_tcp_client(connection)
 
       # Read message and extract command
       read_command(connection, message)
@@ -159,7 +153,7 @@ private
   end
 
   # Handle input from the client and disconnect on a closed socket
-  def receive_message_from_client(connection)
+  def receive_message_from_tcp_client(connection)
     message = connection.read_from_client
     if message.nil?
       Logger.log(connection, message, "leave")
