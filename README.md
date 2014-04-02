@@ -18,3 +18,11 @@ ruby run_server.rb 8000 8001 -v -d
 -v logs the server actions.
 
 -d is development mode and will allow Threads to abort the process on errors.
+
+Why the code is messy
+---------------------
+It's pretty messy on this branch because I misread the specifications of the
+assignment and didn't realize until a couple days before the deadline. To make
+matters worse I had another programming project due for another class due that
+week. Thus, unstructured and ungeneric code. I recommend looking at the master
+branch for something that is less of an eyesore.

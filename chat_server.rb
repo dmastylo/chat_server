@@ -127,11 +127,16 @@ private
     command = message.split[0]
 
     if ["SEND", "BROADCAST"].include? command
-      length = read_message_length(connection)
+      length, length_message = read_message_length(connection)
 
       if length > 0
         # Remove the command from the message and keep userids
         connection.receivers = message.split[1..message.split.length]
+
+        # Send the length to the receivers
+        message_header = "FROM #{connection.nick_name}\n"
+        length_message.prepend message_header
+        send("#{command.downcase}_chat_message", connection, connection.receivers, length_message)
 
         dope_message = Message.new(connection, length)
 
@@ -145,23 +150,25 @@ private
           break unless connection.processing_chunk
 
           # Next line should be the new chunk length
-          length = read_message_length(connection)
+          length, length_message = read_message_length(connection)
           dope_message.prep_new_message(length)
 
           # "C0\n" has been reached indicating the end of the message, or
           # an invalid length was entered
-          connection.reset_status
-
           if length.nil?
             connection.reset_status
             send_message_to_client(connection, "ERROR: invalid message length")
+          elsif length == 0
+            # Send the length to the receivers
+            send("#{command.downcase}_chat_message", connection, connection.receivers, length_message)
+            connection.reset_status
           end
         end
 
         # Processing regular message without chunking
         if connection.processing_message
           dope_message.construct_message
-          send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message)
+          send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message, true)
         end
       else
         connection.reset_status
@@ -174,17 +181,19 @@ private
     end
   end
 
+  # Returns array [length integer, length string message]
+  # Use the length string message to send to the client
   def read_message_length(connection)
     # Read the length of the message
-    length = receive_message_from_tcp_client(connection)
+    length_message = receive_message_from_tcp_client(connection)
 
     # Check if it's a regular message or a chunked message (ugh)
-    match = length.match(/C(\d*)/)
+    match = length_message.match(/C(\d*)/)
     if match.nil?
-      if length.to_i == 0
+      if length_message.to_i == 0
         return nil
       else
-        length = length.to_i
+        length = length_message.to_i
         connection.processing_message = true
       end
     else
@@ -192,13 +201,11 @@ private
       length = match[1].to_i
     end
 
-    length
+    [length, length_message]
   end
 
-  def send_chat_message(connection, receivers, message)
+  def send_chat_message(connection, receivers, message, reset = false)
     message_receivers = receivers.map { |receiver| @clients[receiver.to_sym] }.compact
-    message_header = "FROM #{connection.nick_name}\n"
-    message.prepend message_header
 
     if message_receivers.empty?
       send_message_to_client(connection, "ERROR: userid(s) do not exist")
@@ -210,23 +217,20 @@ private
 
       # If we're sending a regular (non-chunked) message we don't want to listen
       # further so we want to listen for new commands
-      unless connection.processing_chunk
+      if (!connection.processing_chunk && reset)
         connection.reset_status
       end
     end
   end
 
-  def broadcast_chat_message(connection, _, message)
-    message_header = "FROM #{connection.nick_name}\n"
-    message.prepend message_header
-
+  def broadcast_chat_message(connection, _, message, reset = false)
     @clients.each do |other_name, message_receiver|
       send_message_to_client(message_receiver, message) unless message_receiver == connection
     end
 
     # If we're sending a regular (non-chunked) message we don't want to listen
     # further so we want to listen for new commands
-    unless connection.processing_chunk
+    if (!connection.processing_chunk && reset)
       connection.reset_status
     end
   end
@@ -239,7 +243,7 @@ private
 
       # Clean up the client and connection
       @clients.delete connection.nick_name.to_sym if connection.nick_name
-      connection.client.close
+      connection.close_client
 
       Thread.kill connection.thread if connection.thread
     end

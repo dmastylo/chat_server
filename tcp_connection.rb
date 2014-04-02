@@ -2,6 +2,8 @@ require './connection'
 
 class TCPConnection < Connection
 
+  # processing_message is for regular non-chunked messages
+  # processing_chunk is for chunked messages (see how that works?)
   attr_accessor :thread, :processing_message, :processing_chunk, :receivers
 
   def initialize(nick_name, client, thread)
@@ -18,7 +20,7 @@ class TCPConnection < Connection
 
   def read_from_client
     # Returns nil on closed socket
-    message = client.gets
+    message = @client.gets
 
     # Get rid of carriage returns and deal with just regular newlines
     unless message.nil?
@@ -31,14 +33,11 @@ class TCPConnection < Connection
 
   # send a message from the server to the client
   def send_message(message)
-    client.puts message
-  end
-
-  def send_chunk(message)
+    @client.puts message
   end
 
   def client_full_address
-    host_name = client.peeraddr(:hostname)
+    host_name = @client.peeraddr(:hostname)
     "#{host_name[2]}:#{host_name[1]}"
   end
 
