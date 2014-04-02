@@ -126,7 +126,7 @@ private
 
     command = message.split[0]
 
-    if command == "SEND"
+    if ["SEND", "BROADCAST"].include? command
       length = read_message_length(connection)
 
       if length > 0
@@ -138,27 +138,35 @@ private
         # Processing chunked messages
         while connection.processing_chunk do
           dope_message.construct_message
-          send_chat_message(connection, connection.receivers, dope_message.message)
+          send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message)
+
+          # If the userids do not exist then processing_chunk will be false,
+          # no point in listening for more messages as no one to send to
           break unless connection.processing_chunk
 
-          # Next line should new chunk length
+          # Next line should be the new chunk length
           length = read_message_length(connection)
           dope_message.prep_new_message(length)
 
-          # "C0\n" has been reached indicating the end of the message
-          connection.reset_status if length == 0
+          # "C0\n" has been reached indicating the end of the message, or
+          # an invalid length was entered
+          connection.reset_status
+
+          if length.nil?
+            connection.reset_status
+            send_message_to_client(connection, "ERROR: invalid message length")
+          end
         end
 
         # Processing regular message without chunking
         if connection.processing_message
           dope_message.construct_message
-          send_chat_message(connection, connection.receivers, dope_message.message)
+          send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message)
         end
       else
         connection.reset_status
         send_message_to_client(connection, "ERROR: invalid message length")
       end
-    elsif command == "BROADCAST"
     elsif command == "LOGOUT"
     elsif message[0..7] == "WHO HERE"
     else
@@ -173,8 +181,12 @@ private
     # Check if it's a regular message or a chunked message (ugh)
     match = length.match(/C(\d*)/)
     if match.nil?
-      length = length.to_i
-      connection.processing_message = true
+      if length.to_i == 0
+        return nil
+      else
+        length = length.to_i
+        connection.processing_message = true
+      end
     else
       connection.processing_chunk = true
       length = match[1].to_i
@@ -204,9 +216,18 @@ private
     end
   end
 
-  def broadcast_chat_message(connection, receiver, message)
+  def broadcast_chat_message(connection, _, message)
+    message_header = "FROM #{connection.nick_name}\n"
+    message.prepend message_header
+
     @clients.each do |other_name, message_receiver|
-      send_message_to_client(message_receiver, "BROADCAST FROM #{connection.nick_name}\n #{message}")
+      send_message_to_client(message_receiver, message) unless message_receiver == connection
+    end
+
+    # If we're sending a regular (non-chunked) message we don't want to listen
+    # further so we want to listen for new commands
+    unless connection.processing_chunk
+      connection.reset_status
     end
   end
 
