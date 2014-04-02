@@ -2,7 +2,7 @@ require './connection'
 
 class TCPConnection < Connection
 
-  attr_accessor :thread, :processing_message, :processing_chunk, :last_command, :receivers
+  attr_accessor :thread, :processing_message, :processing_chunk, :receivers
 
   def initialize(nick_name, client, thread)
     @thread = thread
@@ -11,10 +11,9 @@ class TCPConnection < Connection
   end
 
   def reset_status
+    @receivers = []
     @processing_message = false
     @processing_chunk = false
-    @last_command = nil
-    @receivers = []
   end
 
   def read_from_client

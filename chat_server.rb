@@ -42,7 +42,7 @@ private
           thread = Thread.new do
             connection = TCPConnection.new(nil, client, thread)
 
-            listen_for_messages(connection)
+            listen_for_commands(connection)
           end
         end
       end
@@ -109,23 +109,14 @@ private
     nick_name
   end
 
-  def listen_for_messages(connection)
+  def listen_for_commands(connection)
     loop do
       # all cleanup will be done in this method on socket closing and such
       message = receive_message_from_tcp_client(connection)
 
-      # TODO remove this?
-      # If we're still listening for more of the message, don't read for commands
-      if connection.processing_message
-        process_message(connection, message)
-      else
-        # Read message and extract command
-        read_command(connection, message)
-      end
+      # Read message and extract command
+      read_command(connection, message)
     end
-  end
-
-  def process_message(connection, message)
   end
 
   def read_command(connection, message)
@@ -140,7 +131,6 @@ private
 
       if length > 0
         # Remove the command from the message and keep userids
-        connection.last_command = command
         connection.receivers = message.split[1..message.split.length]
 
         dope_message = Message.new(connection, length)
@@ -187,7 +177,6 @@ private
       connection.processing_message = true
     else
       connection.processing_chunk = true
-      # connection.last_command = message.first.split.first
       length = match[1].to_i
     end
 
@@ -207,40 +196,12 @@ private
         send_message_to_client(receiver, message)
       end
 
+      # If we're sending a regular (non-chunked) message we don't want to listen
+      # further so we want to listen for new commands
       unless connection.processing_chunk
         connection.reset_status
       end
     end
-
-
-    # It's an annoying chunked message
-    # if message[1] =~ /C\d*/
-    #   connection.processing_chunk = true
-    #   connection.chunk_command = message.first.split.first
-
-    #   # Construct the chunks
-    #   chunks = ["#{message[1]}\n"]
-
-    #   message.drop(2).each do |line|
-    #     chunks << "" if line =~ /C\d*/
-    #     chunks.last << "#{line}\n"
-
-    #     # Already have full chunked message, so no more chunks should arrive.
-    #     # Other messages will be new commands
-    #     if line =~ /C0/
-    #       connection.processing_chunk = false
-    #       connection.chunk_command = nil
-    #       break
-    #     end
-    #   end
-    # else
-    #   # TODO
-    #   # send_message = message.split[1..message.length].join(" ").split("\n")
-
-    #   # Don't send the userid
-    #   # send_message_to_client(message_receiver, "#{send_message}")
-    # end
-
   end
 
   def broadcast_chat_message(connection, receiver, message)
