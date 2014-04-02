@@ -19,11 +19,9 @@ class Message
     end
   end
 
-  def construct_chunk
-    while @message.length < @length
-      received = @connection.read_from_client
-      @message << received
-    end
+  def prep_new_message(length)
+    @message = ""
+    @length = length
   end
 
 end

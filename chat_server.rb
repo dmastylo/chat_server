@@ -114,6 +114,7 @@ private
       # all cleanup will be done in this method on socket closing and such
       message = receive_message_from_tcp_client(connection)
 
+      # TODO remove this?
       # If we're still listening for more of the message, don't read for commands
       if connection.processing_message
         process_message(connection, message)
@@ -143,20 +144,28 @@ private
         connection.receivers = message.split[1..message.split.length]
 
         dope_message = Message.new(connection, length)
+
+        # Processing chunked messages
         while connection.processing_chunk do
-          dope_message.construct_chunk
+          dope_message.construct_message
           send_chat_message(connection, connection.receivers, dope_message.message)
+          break unless connection.processing_chunk
+
           # Next line should new chunk length
-          # TODO
+          length = read_message_length(connection)
+          dope_message.prep_new_message(length)
+
+          # "C0\n" has been reached indicating the end of the message
+          connection.reset_status if length == 0
         end
 
+        # Processing regular message without chunking
         if connection.processing_message
           dope_message.construct_message
           send_chat_message(connection, connection.receivers, dope_message.message)
         end
       else
-        connection.processing_message = false
-        connection.processing_chunk = false
+        connection.reset_status
         send_message_to_client(connection, "ERROR: invalid message length")
       end
     elsif command == "BROADCAST"
@@ -171,14 +180,14 @@ private
     # Read the length of the message
     length = receive_message_from_tcp_client(connection)
 
-    # Check if it's a regular messaged or a chunked message (ugh)
+    # Check if it's a regular message or a chunked message (ugh)
     match = length.match(/C(\d*)/)
     if match.nil?
       length = length.to_i
       connection.processing_message = true
     else
       connection.processing_chunk = true
-      connection.chunk_command = message.first.split.first
+      # connection.last_command = message.first.split.first
       length = match[1].to_i
     end
 
@@ -192,13 +201,17 @@ private
 
     if message_receivers.empty?
       send_message_to_client(connection, "ERROR: userid(s) do not exist")
+      connection.reset_status
     else
-      message_receivers.each do |message_receiver|
-        send_message_to_client(message_receiver, message)
+      message_receivers.each do |receiver|
+        send_message_to_client(receiver, message)
+      end
+
+      unless connection.processing_chunk
+        connection.reset_status
       end
     end
 
-    connection.reset_status
 
     # It's an annoying chunked message
     # if message[1] =~ /C\d*/
