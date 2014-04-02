@@ -255,6 +255,7 @@ private
   def send_message_to_client(connection, message)
     connection.send_message message
     Logger.log(connection, message, "send")
+    message
   end
 
 end
