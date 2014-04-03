@@ -126,6 +126,7 @@ private
 
     command = message.split[0]
 
+    # Decode command
     if ["SEND", "BROADCAST"].include? command
       length, length_message = read_message_length(connection)
 
@@ -176,6 +177,7 @@ private
       end
     elsif command == "LOGOUT"
     elsif message[0..7] == "WHO HERE"
+      send_message_to_client(connection, @clients.keys.join(" "))
     else
       send_message_to_client(connection, "ERROR: invalid command")
     end
