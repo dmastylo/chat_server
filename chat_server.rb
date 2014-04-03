@@ -176,6 +176,8 @@ private
         send_message_to_client(connection, "ERROR: invalid message length")
       end
     elsif command == "LOGOUT"
+      # Remove from clients
+      @clients.delete(@clients.key(connection))
     elsif message[0..7] == "WHO HERE"
       send_message_to_client(connection, @clients.keys.join(" "))
     else
