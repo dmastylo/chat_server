@@ -39,7 +39,7 @@ private
         loop do
           client = tcp_server.accept
           thread = Thread.new do
-            connection = TCPConnection.new(nil, client, thread)
+            connection = TCPConnection.new(nil, client)
 
             listen_for_messages(connection)
           end
@@ -126,7 +126,7 @@ private
 
     command = message.split[0]
 
-    if ["SEND", "BROADCAST"].include? command
+    if ["SEND", "BROADCAST", "WHO", "LOGOUT"].include? command
       # Remove the command from the message and keep userid if SENDing
       message = message.split[1..message.length].join(" ")
       send("#{command.downcase}_chat_message", connection, message)
@@ -150,6 +150,19 @@ private
     @clients.each do |other_name, message_receiver|
       send_message_to_client(message_receiver, "#{connection.nick_name}: #{message}")
     end
+  end
+
+  def who_chat_message(connection, message)
+    # Search for 'HERE' throw error if not found
+    if message == "HERE"
+      send_message_to_client(connection, @clients.keys.join(" "))
+    else
+      send_message_to_client(connection, "ERROR: invalid command")
+    end
+  end
+
+  def logout_chat_message(connection, message)
+    # LOGOUT logic
   end
 
   # Handle input from the client and disconnect on a closed socket
