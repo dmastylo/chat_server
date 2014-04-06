@@ -131,9 +131,17 @@ private
       if length == "UDP_CHUNK"
         send_message_to_client(connection, "ERROR: UDP can't send chunked messages")
         return
+      elsif length.nil?
+        connection.reset_status
+        send_message_to_client(connection, "ERROR: invalid message length")
       elsif length > 0
         # Remove the command from the message and keep userids
-        connection.receivers = message.downcase.split[1..message.split.length]
+        from_user = message.downcase.split[1]
+        if from_user != connection.nick_name
+          send_message_to_client(connection, "ERROR: <from-user> must be your own nick_name")
+          return
+        end
+        connection.receivers = message.downcase.split[2..message.split.length]
 
         # Send the length to the receivers
         message_header = "FROM #{connection.nick_name}\n"
@@ -172,9 +180,6 @@ private
           dope_message.construct_message
           send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message, true)
         end
-      else
-        connection.reset_status
-        send_message_to_client(connection, "ERROR: invalid message length")
       end
     elsif command == "LOGOUT"
       # Remove from clients
