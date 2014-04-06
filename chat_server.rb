@@ -133,7 +133,7 @@ private
         return
       elsif length > 0
         # Remove the command from the message and keep userids
-        connection.receivers = message.split[1..message.split.length]
+        connection.receivers = message.downcase.split[1..message.split.length]
 
         # Send the length to the receivers
         message_header = "FROM #{connection.nick_name}\n"
