@@ -19,7 +19,11 @@ class Message
     # Length 10: hey there\n (\n is a single char)
     # If 8 or C8 is received, the e\n should be cut off from the message
     # but with ".." it'll include the 8th index which is actually the 9th char
-    @message = @message[0...@length]
+    if @message.length > @length
+      false
+    else
+      @message = @message[0...@length]
+    end
   end
 
   def prep_new_message(length)

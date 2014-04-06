@@ -124,6 +124,18 @@ private
 
     command = message.split[0]
 
+    # Check for existence of from-user
+    if message[0..7] == "WHO HERE"
+      from_user = message.downcase.split[2]
+    else
+      from_user = message.downcase.split[1]
+    end
+
+    if from_user != connection.nick_name
+      send_message_to_client(connection, "ERROR: <from-user> must be your own nick_name")
+      return
+    end
+
     # Decode command
     if ["SEND", "BROADCAST"].include? command
       length, length_message = read_message_length(connection)
@@ -131,16 +143,14 @@ private
       if length == "UDP_CHUNK"
         send_message_to_client(connection, "ERROR: UDP can't send chunked messages")
         return
+      elsif length == "NEED_CHUNK"
+        send_message_to_client(connection, "ERROR: messages greater than 99 bytes need to be chunked")
+        return
       elsif length.nil?
         connection.reset_status
         send_message_to_client(connection, "ERROR: invalid message length")
       elsif length > 0
         # Remove the command from the message and keep userids
-        from_user = message.downcase.split[1]
-        if from_user != connection.nick_name
-          send_message_to_client(connection, "ERROR: <from-user> must be your own nick_name")
-          return
-        end
         connection.receivers = message.downcase.split[2..message.split.length]
 
         # Send the length to the receivers
@@ -152,7 +162,12 @@ private
 
         # Processing chunked messages
         while connection.processing_chunk do
-          dope_message.construct_message
+          unless dope_message.construct_message
+            connection.reset_status
+            send_message_to_client(connection, "ERROR: message longer than given size")
+            return
+          end
+
           send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message)
 
           # If the userids do not exist then processing_chunk will be false,
@@ -177,8 +192,12 @@ private
 
         # Processing regular message without chunking
         if connection.processing_message
-          dope_message.construct_message
-          send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message, true)
+          if dope_message.construct_message
+            send("#{command.downcase}_chat_message", connection, connection.receivers, dope_message.message, true)
+          else
+            connection.reset_status
+            send_message_to_client(connection, "ERROR: message longer than given size")
+          end
         end
       end
     elsif command == "LOGOUT"
@@ -203,8 +222,12 @@ private
       if length_message.to_i == 0
         length = nil
       else
-        length = length_message.to_i
-        connection.processing_message = true
+        if length_message.to_i > 99
+          length = "NEED_CHUNK"
+        else
+          length = length_message.to_i
+          connection.processing_message = true
+        end
       end
     else
       if connection.is_a? UDPConnection
