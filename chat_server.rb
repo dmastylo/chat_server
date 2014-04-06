@@ -120,16 +120,17 @@ private
   end
 
   def read_command(connection, message)
-    unless connection.nick_name
-      return set_nick_name(connection, message)
-    end
+    return set_nick_name(connection, message) unless connection.nick_name
 
     command = message.split[0]
 
     if ["SEND", "BROADCAST"].include? command
       length, length_message = read_message_length(connection)
 
-      if length > 0
+      if length == "UDP_CHUNK"
+        send_message_to_client(connection, "ERROR: UDP can't send chunked messages")
+        return
+      elsif length > 0
         # Remove the command from the message and keep userids
         connection.receivers = message.split[1..message.split.length]
 
@@ -191,14 +192,18 @@ private
     match = length_message.match(/C(\d*)/)
     if match.nil?
       if length_message.to_i == 0
-        return nil
+        length = nil
       else
         length = length_message.to_i
         connection.processing_message = true
       end
     else
-      connection.processing_chunk = true
-      length = match[1].to_i
+      if connection.is_a? UDPConnection
+        length = "UDP_CHUNK"
+      else
+        connection.processing_chunk = true
+        length = match[1].to_i
+      end
     end
 
     [length, length_message]
@@ -211,8 +216,8 @@ private
       send_message_to_client(connection, "ERROR: userid(s) do not exist")
       connection.reset_status
     else
-      message_receivers.each do |receiver|
-        send_message_to_client(receiver, message)
+      message_receivers.each do |message_receiver|
+        send_message_to_client(message_receiver, message) if can_receive?(connection, message_receiver)
       end
 
       # If we're sending a regular (non-chunked) message we don't want to listen
@@ -225,13 +230,23 @@ private
 
   def broadcast_chat_message(connection, _, message, reset = false)
     @clients.each do |other_name, message_receiver|
-      send_message_to_client(message_receiver, message) unless message_receiver == connection
+      if (can_receive?(connection, message_receiver) && connection != message_receiver)
+        send_message_to_client(message_receiver, message)
+      end
     end
 
     # If we're sending a regular (non-chunked) message we don't want to listen
     # further so we want to listen for new commands
     if (!connection.processing_chunk && reset)
       connection.reset_status
+    end
+  end
+
+  def can_receive?(connection, message_receiver)
+    if (connection.processing_chunk && message_receiver.is_a?(UDPConnection))
+      false
+    else
+      true
     end
   end
 
@@ -252,9 +267,9 @@ private
     message
   end
 
-  def send_message_to_client(connection, message)
-    connection.send_message message
-    Logger.log(connection, message, "send")
+  def send_message_to_client(receiver, message)
+    receiver.send_message message
+    Logger.log(receiver, message, "send")
     message
   end
 

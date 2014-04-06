@@ -9,11 +9,7 @@ module Logger
     def log(connection, message, state)
       return unless @verbose
 
-      if connection.nick_name
-        host_name = "#{connection.nick_name} (#{connection.client_full_address})"
-      else
-        host_name = connection.client_full_address
-      end
+      host_name = connection.client_full_address
 
       if state == "send"
         message = "SENT to #{host_name}:\n#{message}"

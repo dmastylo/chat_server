@@ -18,6 +18,10 @@ class UDPConnection < Connection
     message.chomp
   end
 
+  def processing_chunk
+    false
+  end
+
   # send a message from the server to the client
   def send_message(message)
     @socket.send(message << "\n", 0, nil, @client)
