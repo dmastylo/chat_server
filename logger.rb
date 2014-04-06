@@ -6,7 +6,7 @@ module Logger
       @verbose = verbose
     end
 
-    def log(connection, message, state)
+    def log(connection, message = nil, state)
       return unless @verbose
 
       host_name = connection.client_full_address

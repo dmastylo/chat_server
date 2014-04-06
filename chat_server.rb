@@ -178,7 +178,7 @@ private
       end
     elsif command == "LOGOUT"
       # Remove from clients
-      @clients.delete(@clients.key(connection))
+      clean_up_connection(connection)
     elsif message[0..7] == "WHO HERE"
       send_message_to_client(connection, @clients.keys.join(" "))
     else
@@ -257,15 +257,7 @@ private
   # Handle input from the client and disconnect on a closed socket
   def receive_message_from_tcp_client(connection)
     message = connection.read_from_client
-    if message.nil?
-      Logger.log(connection, message, "leave")
-
-      # Clean up the client and connection
-      @clients.delete connection.nick_name.to_sym if connection.nick_name
-      connection.close_client
-
-      Thread.kill connection.thread if connection.thread
-    end
+    clean_up_connection(connection) if message.nil?
 
     Logger.log(connection, message, "receive")
     message
@@ -275,6 +267,16 @@ private
     receiver.send_message message
     Logger.log(receiver, message, "send")
     message
+  end
+
+  def clean_up_connection(connection)
+    Logger.log(connection, "leave")
+
+    # Clean up the client and connection
+    @clients.delete connection.nick_name.to_sym if connection.nick_name
+    connection.close_client
+
+    Thread.kill connection.thread if connection.thread
   end
 
 end
