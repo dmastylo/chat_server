@@ -4,12 +4,11 @@ class TCPConnection < Connection
 
   # processing_message is for regular non-chunked messages
   # processing_chunk is for chunked messages (see how that works?)
-  attr_accessor :thread, :processing_chunk
+  attr_accessor :processing_chunk
 
   def initialize(nick_name, client, thread)
-    @thread = thread
     reset_status
-    super(nick_name, client)
+    super(nick_name, client, thread)
   end
 
   def reset_status
@@ -38,6 +37,11 @@ class TCPConnection < Connection
   def client_full_address
     host_name = @client.peeraddr(:hostname)
     "#{nick_name} (#{host_name[2]}:#{host_name[1]})"
+  end
+
+  # We don't want business logic to touch the client
+  def close_client
+    @client.close
   end
 
 end

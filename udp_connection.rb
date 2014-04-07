@@ -7,7 +7,7 @@ class UDPConnection < Connection
   def initialize(nick_name, client, client_full_address, socket)
     @socket = socket
     @client_full_address = client_full_address
-    super(nick_name, client)
+    super(nick_name, client, nil)
   end
 
   def read_from_client
@@ -25,6 +25,10 @@ class UDPConnection < Connection
   # send a message from the server to the client
   def send_message(message)
     @socket.send(message << "\n", 0, nil, @client)
+  end
+
+  def close_client
+    true
   end
 
 end

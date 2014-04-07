@@ -1,20 +1,16 @@
 class Connection
 
-  attr_accessor :nick_name, :processing_message, :receivers
+  attr_accessor :nick_name, :processing_message, :receivers, :thread
 
-  def initialize(nick_name, client)
+  def initialize(nick_name, client, thread)
     @nick_name = nick_name
     @client = client
+    @thread = thread
   end
 
   def reset_status
     @receivers = []
     @processing_message = false
-  end
-
-  # We don't want business logic to touch the client
-  def close_client
-    @client.close
   end
 
 end
