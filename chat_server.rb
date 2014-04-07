@@ -324,7 +324,7 @@ private
 
     receiver.send_message message
 
-    Logger.log(receiver, message, "send")
+    Logger.log(receiver, message, "send_random")
   end
 
   def clean_up_connection(connection)

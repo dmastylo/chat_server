@@ -13,6 +13,8 @@ module Logger
 
       if state == "send"
         message = "SENT to #{host_name}:\n#{message}"
+      elsif state == "send_random"
+        message = "SENT (randomly!) to #{host_name}:\n#{message}"
       elsif state == "receive"
         message = "RCVD from #{host_name}:\n#{message}"
       elsif state == "leave"
