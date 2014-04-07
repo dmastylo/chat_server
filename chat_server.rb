@@ -177,16 +177,17 @@ private
           # Next line should be the new chunk length
           length, length_message = read_message_length(connection)
           dope_message.prep_new_message(length)
+          puts "processing_chunk: #{connection.processing_chunk}"
+          puts "length: #{length} length_message: #{length_message}"
 
           # "C0\n" has been reached indicating the end of the message, or
           # an invalid length was entered
           if length.nil?
             connection.reset_status
             send_message_to_client(connection, "ERROR: invalid message length")
-          elsif length == 0
-            # Send the length to the receivers
+          else
             send("#{command.downcase}_chat_message", connection, connection.receivers, length_message, false, true)
-            connection.reset_status
+            connection.reset_status if length == 0
           end
         end
 
