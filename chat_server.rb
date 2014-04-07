@@ -3,6 +3,7 @@ require './tcp_connection'
 require './udp_connection'
 require './message'
 require './logger'
+require './random_messages'
 
 class ChatServer
   # clients is a hash -> { nick_name: Connection class }
@@ -33,7 +34,6 @@ private
   def run
     server_threads = []
 
-    # TODO: chunking
     # TCP Server connections
     @tcp_servers.map do |tcp_server|
       server_threads << Thread.new do
@@ -156,7 +156,7 @@ private
         # Send the length to the receivers
         message_header = "FROM #{connection.nick_name}\n"
         length_message.prepend message_header
-        send("#{command.downcase}_chat_message", connection, connection.receivers, length_message)
+        send("#{command.downcase}_chat_message", connection, connection.receivers, length_message, false, true)
 
         dope_message = Message.new(connection, length)
 
@@ -177,16 +177,17 @@ private
           # Next line should be the new chunk length
           length, length_message = read_message_length(connection)
           dope_message.prep_new_message(length)
+          puts "processing_chunk: #{connection.processing_chunk}"
+          puts "length: #{length} length_message: #{length_message}"
 
           # "C0\n" has been reached indicating the end of the message, or
           # an invalid length was entered
           if length.nil?
             connection.reset_status
             send_message_to_client(connection, "ERROR: invalid message length")
-          elsif length == 0
-            # Send the length to the receivers
-            send("#{command.downcase}_chat_message", connection, connection.receivers, length_message)
-            connection.reset_status
+          else
+            send("#{command.downcase}_chat_message", connection, connection.receivers, length_message, false, true)
+            connection.reset_status if length == 0
           end
         end
 
@@ -241,7 +242,7 @@ private
     [length, length_message]
   end
 
-  def send_chat_message(connection, receivers, message, reset = false)
+  def send_chat_message(connection, receivers, message, reset = false, length_message = nil)
     message_receivers = receivers.map { |receiver| @clients[receiver.to_sym] }.compact
 
     if message_receivers.empty?
@@ -249,7 +250,7 @@ private
       connection.reset_status
     else
       message_receivers.each do |message_receiver|
-        send_message_to_client(message_receiver, message) if can_receive?(connection, message_receiver)
+        send_message_to_client(message_receiver, message, connection, length_message) if can_receive?(connection, message_receiver)
       end
 
       # If we're sending a regular (non-chunked) message we don't want to listen
@@ -260,10 +261,10 @@ private
     end
   end
 
-  def broadcast_chat_message(connection, _, message, reset = false)
+  def broadcast_chat_message(connection, _, message, reset = false, length_message = nil)
     @clients.each do |other_name, message_receiver|
       if (can_receive?(connection, message_receiver) && connection != message_receiver)
-        send_message_to_client(message_receiver, message)
+        send_message_to_client(message_receiver, message, connection, length_message)
       end
     end
 
@@ -291,10 +292,39 @@ private
     message
   end
 
-  def send_message_to_client(receiver, message)
+  def send_message_to_client(receiver, message, sender = nil, length_message = false)
     receiver.send_message message
+
+    # If the message isn't from the server (errors, WHO HERE..)
+    # Or if the message isn't a length_message
+    if (!sender.nil? && !length_message)
+      receiver.message_count += 1
+      receiver.recent_senders << sender
+    end
+
+    # Check if counter if divisible by 3
+    puts "message_count: #{receiver.message_count}"
+    if (receiver.message_count % 3 == 0 && receiver.message_count != 0)
+      send_random_message_to_client(receiver)
+      receiver.recent_senders.clear
+      receiver.message_count = 0
+    end
+
     Logger.log(receiver, message, "send")
     message
+  end
+
+  def send_random_message_to_client(receiver)
+    message = RANDOM_MESSAGES.sample
+    sender = receiver.recent_senders.sample
+
+    # Send the length to the receiver
+    message_header = "FROM #{sender.nick_name}\n#{message.length + 1}\n"
+    message.prepend message_header
+
+    receiver.send_message message
+
+    Logger.log(receiver, message, "send")
   end
 
   def clean_up_connection(connection)
